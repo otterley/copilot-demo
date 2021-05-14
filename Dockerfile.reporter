@@ -1,0 +1,30 @@
+FROM public.ecr.aws/bitnami/golang:1.16.4-debian-10-r6 AS build
+
+ENV USER=appuser
+ENV UID=10001
+ENV GOPROXY=direct
+
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/nonexistent" \
+    --shell "/sbin/nologin" \
+    --no-create-home \
+    --uid "${UID}" \
+    "${USER}"
+
+COPY go.mod go.sum /build/
+WORKDIR /build/
+RUN go mod download
+COPY reporter/*.go /build/
+RUN env CGO_ENABLED=0 go build -o /reporter main.go
+
+FROM scratch
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=build /etc/passwd /etc/passwd
+COPY --from=build /etc/group /etc/group
+COPY --from=build /reporter /reporter
+
+USER appuser:appuser
+EXPOSE 8080
+ENTRYPOINT ["/reporter"]
